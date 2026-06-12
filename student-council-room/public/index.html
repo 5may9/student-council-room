@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>学生会室管理システム</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#0b0f19">
+    <link class="pwa-icon" rel="apple-touch-icon" href="./icon-192.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=Noto+Sans+JP:wght@400;600;800;900&display=swap');
+        
+        body { 
+            font-family: 'Inter', 'Noto Sans JP', sans-serif; 
+            -webkit-tap-highlight-color: transparent; 
+            background-color: #0b0f19; 
+            color: #f1f5f9;
+            min-height: 100vh;
+        }
+        
+        .cyber-card {
+            background: rgba(20, 27, 45, 0.7);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-overlay { visibility: hidden; opacity: 0; pointer-events: none; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); position: fixed; inset: 0; background: rgba(5, 8, 16, 0.8); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 100; }
+        .modal-overlay.show { visibility: visible; opacity: 1; pointer-events: auto; }
+        .modal-content { background: #111827; width: 100%; max-width: 32rem; max-height: 85vh; border-radius: 2rem; overflow-y: auto; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); color: #f3f4f6; transform: translateY(15px); transition: transform 0.3s ease; }
+        .modal-overlay.show .modal-content { transform: translateY(0); }
+        
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
+        
+        .active-scale { transition: transform 0.1s ease; }
+        .active-scale:active { transform: scale(0.96); }
+        
+        @keyframes pulse-fast { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.98); } }
+        .animate-pulse-fast { animation: pulse-fast 1.5s infinite ease-in-out; }
+        
+        .badge-dot { position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; box-shadow: 0 0 10px #ef4444; }
+
+        input, select, textarea {
+            background-color: #1f2937; color: #f8fafc; border: 1px solid #374151; padding: 0.75rem; border-radius: 0.75rem; font-size: 0.875rem; font-weight: bold; width: 100%;
+        }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #3b82f6; }
+    </style>
+</head>
+<body class="flex flex-col pb-24">
+
+    <div id="gate-screen" class="hidden fixed inset-0 bg-[#0b0f19] z-[200] flex flex-col items-center justify-center p-8 text-center">
+        <div class="text-6xl mb-6 animate-pulse text-blue-500">🌌</div>
+        <h2 class="text-2xl font-black mb-2 tracking-tight">APPLICATION PENDING</h2>
+        <p class="text-slate-400 text-sm mb-8 leading-relaxed">利用申請を送信しました。管理者による承認をお待ちください。</p>
+        <button onclick="logout()" class="bg-slate-800 text-white px-6 py-2.5 rounded-xl text-xs font-bold active-scale">サインアウト</button>
+    </div>
+
+    <header class="bg-[#0b0f19]/80 backdrop-blur-md border-b border-white/5 py-4 px-5 sticky top-0 z-40">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <h1 class="text-base sm:text-lg font-black tracking-tighter bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">学生会室管理システム</h1>
+            <div class="flex items-center gap-2">
+                <button id="btn-login" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-xl font-bold text-xs shadow-[0_0_15px_rgba(37,99,235,0.4)] active-scale transition" onclick="login()">LOGIN</button>
+                <div id="user-info" class="hidden flex items-center gap-2">
+                    <button id="btn-root-dashboard" class="hidden bg-slate-800 text-slate-300 p-2.5 rounded-xl text-xs font-bold relative active-scale border border-slate-700" onclick="openRootDashboard()">
+                        ⚙️ Root<span id="badge-root" class="hidden badge-dot"></span>
+                    </button>
+                    <button id="btn-admin-dashboard" class="hidden bg-blue-950/50 text-blue-400 border border-blue-800/50 p-2.5 rounded-xl text-xs font-bold relative active-scale" onclick="openAdminDashboard()">
+                        👑 Admin<span id="badge-admin" class="hidden badge-dot"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md w-full mx-auto p-4 flex flex-col gap-4">
+        
+        <div id="global-emergency-container" class="w-full flex flex-col gap-2 empty:hidden"></div>
+
+        <button id="profile-banner" class="hidden w-full text-left bg-gradient-to-r from-slate-900 via-[#161f33] to-slate-900 text-white p-5 rounded-[1.5rem] border border-white/10 relative overflow-hidden transition active:scale-[0.99]" onclick="openMyPage()">
+            <span id="mypage-badge" class="hidden absolute top-5 right-5 h-2.5 w-2.5 bg-red-500 rounded-full shadow-[0_0_10px_#ef4444]"></span>
+            <div class="text-[9px] font-black text-slate-400 tracking-widest uppercase mb-1.5 flex justify-between items-center relative z-10">
+                <span>DASHBOARD PORTAL</span>
+                <span class="text-blue-400">MY PAGE ＞</span>
+            </div>
+            <div id="banner-role" class="text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 inline-block px-2.5 py-0.5 rounded-md mb-2 relative z-10">--</div>
+            <div class="text-xl font-black tracking-tight relative z-10 truncate"><span id="banner-name">--</span> <span class="text-xs font-normal text-slate-400 ml-1.5">(<span id="banner-class">--</span>)</span></div>
+        </button>
+
+        <div id="my-urgent-tasks-banner" class="hidden flex-col gap-2"></div>
+
+        <div id="council-upcoming-schedule-banner" class="hidden cyber-card p-5 rounded-[1.5rem]">
+            <h4 class="text-[10px] font-black text-slate-400 tracking-widest uppercase mb-3">📅 UPCOMING SCHEDULE</h4>
+            <div id="council-upcoming-schedule-list" class="flex flex-col gap-2 max-h-44 overflow-y-auto pr-1"></div>
+        </div>
+
+        <div id="upcoming-reservation-banner"></div>
+
+        <div class="cyber-card rounded-[1.5rem] p-5 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1" id="status-color-bar"></div>
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 tracking-widest uppercase mb-1">KEY STATUS</p>
+                    <div id="status-display" class="text-2xl font-black tracking-tight">読み込み中...</div>
+                </div>
+                <button class="bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold active-scale" onclick="openKeyHistoryModal()">履歴</button>
+            </div>
+            <div id="status-detail" class="hidden text-[11px] font-bold text-slate-400 bg-slate-900/50 p-2.5 rounded-xl border border-white/5 mt-3">
+                直前操作: <span id="detail-user" class="text-white">--</span> (<span id="detail-time">--/-- --:--</span>)
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3" id="key-buttons-container">
+            <button id="btn-rent" disabled class="cyber-card rounded-2xl p-4 flex flex-col items-center gap-1.5 transition active:scale-[0.97] disabled:opacity-20" onclick="updateKeyStatus('rent')"><div class="text-xl">🔑</div><span class="font-bold text-xs text-slate-300">借用</span></button>
+            <button id="btn-open" disabled class="cyber-card rounded-2xl p-4 flex flex-col items-center gap-1.5 transition active:scale-[0.97] disabled:opacity-20" onclick="updateKeyStatus('open')"><div class="text-xl">🔓</div><span class="font-bold text-xs text-slate-300">開錠</span></button>
+            <button id="btn-lock" disabled class="cyber-card rounded-2xl p-4 flex flex-col items-center gap-1.5 transition active:scale-[0.97] disabled:opacity-20" onclick="updateKeyStatus('lock')"><div class="text-xl">🔒</div><span class="font-bold text-xs text-slate-300">施錠</span></button>
+            <button id="btn-return" disabled class="cyber-card rounded-2xl p-4 flex flex-col items-center gap-1.5 transition active:scale-[0.97] disabled:opacity-20" onclick="updateKeyStatus('return')"><div class="text-xl">📥</div><span class="font-bold text-xs text-slate-300">返却</span></button>
+        </div>
+
+        <div class="cyber-card rounded-[1.5rem] p-5">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="font-black text-xs tracking-wider text-slate-300">💬 会室なう掲示板</h3>
+                <span class="text-[9px] font-bold text-slate-500 bg-slate-900 px-2 py-0.5 rounded">スクロール可</span>
+            </div>
+            <div id="board-now-list" class="flex flex-col gap-2 max-h-[11rem] overflow-y-auto mb-3 pr-1 text-xs"></div>
+            <div class="flex gap-2">
+                <input type="text" id="board-now-input" disabled class="flex-1 bg-slate-900 border border-white/10 p-3 rounded-xl text-xs font-bold text-white focus:border-blue-500" placeholder="状況を書き込む...">
+                <button id="btn-board-submit" disabled onclick="postBoardNow()" class="bg-blue-600 text-white px-4 rounded-xl text-xs font-black active-scale">送信</button>
+            </div>
+            <p id="login-alert" class="text-[10px] text-red-400 font-bold mt-2 text-center bg-red-950/30 p-2 rounded-lg border border-red-900/50">※操作にはログインが必要です。</p>
+        </div>
+    </main>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-[#0f172a]/95 backdrop-blur-lg border-t border-white/5 py-2.5 px-6 z-50 shadow-2xl">
+        <div class="max-w-md mx-auto flex justify-around items-center text-center">
+            <button onclick="window.scrollTo({top:0, behavior:'smooth'})" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-white transition active-scale w-1/3">
+                <span class="text-lg">🏠</span><span class="text-[9px] font-black">ホーム</span>
+            </button>
+            <button onclick="openCouncilSystem()" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-indigo-400 transition active-scale w-1/3">
+                <span class="text-lg">💼</span><span class="text-[9px] font-black">業務システム</span>
+            </button>
+            <button onclick="openReservationListModal()" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-purple-400 transition active-scale w-1/3">
+                <span class="text-lg">📅</span><span class="text-[9px] font-black">予約システム</span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="text-center py-6 text-[10px] text-slate-600 font-bold mb-16">
+        <p>©AKIHITO TAKAHASHI s2301076</p>
+        <p class="mt-1">v2.0.1</p>
+    </div>
+
+    <div id="modal-initial-reg" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-black mb-1 tracking-tight">新規アカウント登録</h3>
+            <p class="text-[10px] text-slate-400 font-bold mb-5 bg-slate-800/50 p-2 rounded-lg">※管理者の承認後に利用可能になります。</p>
+            <div class="flex flex-col gap-4">
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">漢字氏名</label><input type="text" id="reg-name" placeholder="例: 髙橋彰仁"></div>
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">クラス</label><input type="text" id="reg-class" placeholder="例: IT4"></div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">所属団体</label>
+                    <select id="reg-org" onchange="toggleRegCouncilForm()">
+                        <option value="その他の団体">その他の団体（一般ユーザー）</option>
+                        <option value="学生会役員・執行部">学生会役員・執行部</option>
+                        <option value="高専祭実行委員会">高専祭実行委員会</option>
+                        <option value="行事委員会">行事委員会</option>
+                        <option value="学生広報室">学生広報室</option>
+                    </select>
+                </div>
+                <div id="reg-council-fields" class="hidden flex flex-col gap-3 p-4 bg-slate-800/50 rounded-xl border border-white/5 mt-2">
+                    <p class="text-[10px] font-bold text-slate-400 text-center mb-1">役職詳細（学生会専用）</p>
+                    <div id="reg-role-selectors"></div>
+                </div>
+                <button onclick="saveInitialProfile()" class="bg-blue-600 text-white p-3.5 rounded-xl font-black mt-2 active-scale shadow-[0_0_15px_rgba(37,99,235,0.4)]">登録申請を送信</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-mypage" class="modal-overlay">
+        <div class="modal-content !max-w-lg">
+            <div class="flex justify-between items-center mb-6"><h3 class="text-xl font-black text-white">マイページ</h3><button onclick="closeModal('modal-mypage')" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold active-scale">閉じる</button></div>
+            <div class="flex flex-col gap-6">
+                
+                <div class="bg-slate-800/50 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between items-center mb-4">
+                        <span id="mypage-user-badge" class="text-[10px] font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 px-3 py-1 rounded-lg">--</span>
+                        <p id="mypage-email" class="text-[10px] font-mono font-bold text-slate-500">--</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">氏名</label><input type="text" id="mypage-edit-name"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">クラス</label><input type="text" id="mypage-edit-class"></div>
+                    </div>
+                    <button onclick="updateProfileSelf()" class="bg-slate-700 hover:bg-slate-600 text-white w-full py-2.5 rounded-xl text-xs font-black active-scale transition mt-1">プロフィールの変更を保存</button>
+                </div>
+                
+                <div id="mypage-emergency-section" class="hidden bg-red-950/20 p-4 rounded-2xl border border-red-900/50">
+                    <h4 class="font-black text-red-500 text-xs mb-3 flex justify-between items-center">
+                        <span>🚨 全体緊急情報配信</span>
+                        <button onclick="deleteMyBroadcast()" class="text-[10px] bg-red-950 text-red-400 border border-red-800 px-3 py-1 rounded-lg font-bold active-scale">配信終了</button>
+                    </h4>
+                    <input type="text" id="em-text" placeholder="配信内容（例: 本日15時〜学生会室閉鎖）" class="border-red-900/50 focus:border-red-500 mb-3 text-white">
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div><label class="text-[10px] font-bold text-red-400/70 block mb-1">開始日時</label><input type="datetime-local" id="em-start" class="border-red-900/50 text-[10px]"></div>
+                        <div><label class="text-[10px] font-bold text-red-400/70 block mb-1">終了日時</label><input type="datetime-local" id="em-end" class="border-red-900/50 text-[10px]"></div>
+                    </div>
+                    <button onclick="saveBroadcast()" class="bg-red-600 text-white w-full py-3 rounded-xl text-xs font-black active-scale shadow-[0_0_15px_rgba(220,38,38,0.3)]">緊急配信を発信</button>
+                </div>
+
+                <div id="mypage-council-section" class="hidden flex flex-col gap-4">
+                    <div>
+                        <h4 class="font-black text-white text-xs tracking-wider border-l-4 border-indigo-500 pl-2 mb-3">📋 YOUR TO DO</h4>
+                        <div id="mypage-todo-list" class="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1"></div>
+                    </div>
+                    <div>
+                        <h4 class="font-black text-white text-xs tracking-wider border-l-4 border-blue-500 pl-2 mb-3">🗓️ RELATED SCHEDULE</h4>
+                        <div id="mypage-sched-list" class="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="font-black text-white text-xs tracking-wider border-l-4 border-slate-500 pl-2 mb-3">📅 あなたの利用予約状況</h4>
+                    <div id="my-reservations-list" class="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1"></div>
+                </div>
+                
+                <button onclick="logout()" class="w-full text-slate-500 bg-slate-900 border border-slate-800 py-3 rounded-xl text-xs font-bold active-scale mt-2">ログアウト</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-key-history" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-5"><h3 class="font-black text-lg text-white">鍵の操作履歴</h3><button onclick="closeModal('modal-key-history')" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold active-scale">閉じる</button></div>
+            <div id="key-history-list" class="flex flex-col gap-2 max-h-96 overflow-y-auto pr-1 text-sm"></div>
+        </div>
+    </div>
+
+    <div id="modal-calendar" class="modal-overlay">
+        <div class="modal-content" style="max-width: 95vw; height: 85vh; padding: 1.5rem; display: flex; flex-direction: column;">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <h3 class="font-black text-lg text-white">予約カレンダー</h3>
+                <button onclick="closeModal('modal-calendar')" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold active-scale">戻る</button>
+            </div>
+            <div id="calendar" class="flex-1 w-full bg-[#1e293b] rounded-2xl border border-slate-700 p-2 overflow-hidden text-xs"></div>
+        </div>
+    </div>
+
+    <div id="modal-user-reservations" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-5"><h3 class="font-black text-lg text-white">📅 予約システム</h3><button onclick="closeModal('modal-user-reservations')" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold active-scale">閉じる</button></div>
+            <button onclick="openCalendarModal()" class="w-full bg-slate-800 text-blue-400 border border-blue-900/50 py-3.5 rounded-xl font-black text-sm mb-5 active-scale">📅 カレンダーで空きを確認</button>
+            
+            <p class="text-[10px] font-black text-slate-500 tracking-wider mb-2 uppercase">予約データ</p>
+            <div id="user-res-list-content" class="flex flex-col gap-2.5 max-h-60 overflow-y-auto mb-3 pr-1"></div>
+            
+            <button onclick="togglePast('reservations')" id="btn-toggle-res" class="w-full text-center text-[10px] text-slate-400 font-bold py-2.5 mb-4 bg-slate-900 rounded-xl border border-white/5 active-scale">過去の予約を表示する</button>
+            <button onclick="openNewBookingForm()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-black text-sm active-scale shadow-[0_0_15px_rgba(37,99,235,0.3)]">＋ 新規予約申請</button>
+        </div>
+    </div>
+
+    <div id="modal-booking" class="modal-overlay" style="z-index: 130;">
+        <div class="modal-content">
+            <h3 id="booking-title" class="text-xl font-black mb-5 text-white">新規予約申請</h3>
+            <input type="hidden" id="edit-id">
+            <div class="flex flex-col gap-4">
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">利用日</label><input type="date" id="book-date"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">開始時間</label><input type="time" id="book-start"></div>
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">終了時間</label><input type="time" id="book-end"></div>
+                </div>
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">団体名</label><input type="text" id="book-group" placeholder="例: 広報局"></div>
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">利用目的</label><textarea id="book-purpose" placeholder="例: ミーティング" class="h-24"></textarea></div>
+                <div class="flex gap-3 mt-2">
+                    <button onclick="closeModal('modal-booking')" class="flex-1 bg-slate-800 text-slate-300 p-3.5 rounded-xl font-bold text-sm active-scale">キャンセル</button>
+                    <button onclick="saveReservation()" class="flex-1 bg-blue-600 text-white p-3.5 rounded-xl font-black text-sm active-scale shadow-[0_0_15px_rgba(37,99,235,0.4)]">送信</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-admin-dashboard" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-5"><h3 class="font-black text-amber-500 text-lg">👑 Admin 予約審査</h3><button onclick="closeModal('modal-admin-dashboard')" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold active-scale">閉じる</button></div>
+            <div class="flex gap-2 mb-4 bg-slate-900 p-1.5 rounded-xl border border-white/5">
+                <button id="admin-tab-pending" onclick="switchAdminTab('pending')" class="flex-1 py-2 rounded-lg font-black text-xs bg-white text-slate-900 shadow-sm transition">承認待ち申請</button>
+                <button id="admin-tab-all" onclick="switchAdminTab('all')" class="flex-1 py-2 rounded-lg font-bold text-xs text-slate-500 transition hover:bg-slate-800/50">すべての履歴</button>
+            </div>
+            <div id="admin-res-list" class="flex flex-col gap-3 max-h-[55vh] overflow-y-auto pr-1"></div>
+        </div>
+    </div>
+
+    <div id="modal-root" class="modal-overlay">
+        <div class="modal-content !max-w-lg">
+            <div class="flex justify-between items-center mb-5"><h3 class="font-black text-slate-200 text-lg">⚙️ Root コンソール</h3><button onclick="closeModal('modal-root')" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold active-scale">閉じる</button></div>
+            <div class="flex flex-col gap-5 text-xs font-bold">
+                <div class="bg-slate-900/50 p-4 rounded-2xl border border-red-900/30">
+                    <h4 class="text-red-400 font-black mb-3 flex items-center gap-1.5"><span>🚨</span> 全配信中の緊急情報 (強制削除)</h4>
+                    <div id="root-broadcast-list" class="flex flex-col gap-1.5 max-h-28 overflow-y-auto pr-1"></div>
+                </div>
+                <div class="bg-slate-900/50 p-4 rounded-2xl border border-white/5">
+                    <h4 class="text-emerald-400 font-black mb-3 flex items-center gap-1.5">🛑 承認待ちの新規ユーザー</h4>
+                    <div id="root-unapproved-user-list" class="flex flex-col gap-3 max-h-48 overflow-y-auto pr-1 mb-4"></div>
+                    
+                    <h4 class="text-slate-400 font-black mb-3 flex items-center gap-1.5 border-t border-white/10 pt-4">👤 承認済みユーザーリスト</h4>
+                    <div id="root-approved-user-list" class="flex flex-col gap-3 max-h-64 overflow-y-auto pr-1"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-council" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-5"><h3 class="font-black text-indigo-400 text-lg">💼 業務システム</h3><button onclick="closeModal('modal-council')" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold active-scale">閉じる</button></div>
+            
+            <div class="flex gap-2 mb-5 bg-slate-900 p-1.5 rounded-xl border border-white/5">
+                <button onclick="switchCouncilTab('task')" class="flex-1 py-2 rounded-lg font-black text-xs bg-white text-slate-900 shadow-sm transition" id="c-tab-btn-task">タスク・掃除</button>
+                <button onclick="switchCouncilTab('sched')" class="flex-1 py-2 rounded-lg font-bold text-xs text-slate-500 hover:bg-slate-800/50 transition" id="c-tab-btn-sched">スケジュール</button>
+            </div>
+            
+            <div id="council-task-section" class="flex flex-col gap-5">
+                <div class="bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between items-center mb-3"><h4 class="font-black text-xs text-slate-200">📋 業務タスク</h4><button onclick="openAddTaskModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black active-scale transition">+ 新規タスク</button></div>
+                    <div id="council-task-list" class="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1"></div>
+                    <button onclick="togglePast('tasks')" id="btn-toggle-task" class="w-full text-center text-[10px] text-slate-500 font-bold mt-3 pt-3 border-t border-white/10 active-scale">過去・完了済みを表示する</button>
+                </div>
+                
+                <div class="bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between items-center mb-3"><h4 class="font-black text-xs text-slate-200">🧹 掃除当番</h4><button id="btn-add-clean" class="hidden bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black active-scale transition" onclick="openAddCleanModal()">+ 当番割当</button></div>
+                    <div id="council-clean-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1"></div>
+                    <button onclick="togglePast('cleanings')" id="btn-toggle-clean" class="w-full text-center text-[10px] text-slate-500 font-bold mt-3 pt-3 border-t border-white/10 active-scale">過去・完了済みを表示する</button>
+                </div>
+            </div>
+            
+            <div id="council-sched-section" class="hidden flex flex-col gap-4">
+                <div class="bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between items-center mb-3"><h4 class="font-black text-xs text-slate-200">📅 スケジュール</h4><button id="btn-add-sched" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black active-scale transition" onclick="openAddSchedModal()">+ 新規予定</button></div>
+                    <div id="council-sched-list" class="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1"></div>
+                    <button onclick="togglePast('schedules')" id="btn-toggle-sched" class="w-full text-center text-[10px] text-slate-500 font-bold mt-3 pt-3 border-t border-white/10 active-scale">過去の予定を表示する</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-council-add-task" class="modal-overlay" style="z-index: 120;">
+        <div class="modal-content">
+            <h3 class="font-black text-lg mb-4 text-white">新規業務タスク追加</h3>
+            <div class="flex flex-col gap-3">
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">名称</label><input type="text" id="ct-title" placeholder="（例: 予算要望書の集計）"></div>
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">担当 (PC:Ctrl/スマホ:タップで複数可)</label><select id="ct-assign" multiple size="4" class="h-28"></select></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">期日</label><input type="date" id="ct-deadline"></div>
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">時間(任意)</label><input type="time" id="ct-time"></div>
+                </div>
+                <button onclick="saveCouncilTask()" class="bg-indigo-600 text-white p-3.5 rounded-xl font-black mt-3 active-scale shadow-[0_0_15px_rgba(79,70,229,0.4)]">発行する</button>
+                <button onclick="closeModal('modal-council-add-task')" class="text-slate-400 text-center font-bold text-xs mt-1 p-2">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-council-add-clean" class="modal-overlay" style="z-index: 120;">
+        <div class="modal-content">
+            <h3 class="font-black text-lg mb-4 text-white">🧹 掃除当番の新規割当 (Root限定)</h3>
+            <div class="flex flex-col gap-3">
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">担当役員 (複数選択可能)</label><select id="cc-assign" multiple size="5" class="h-32"></select></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">開始日</label><input type="date" id="cc-start"></div>
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">締め切り日</label><input type="date" id="cc-deadline"></div>
+                </div>
+                <button onclick="saveCouncilClean()" class="bg-rose-600 text-white p-3.5 rounded-xl font-black mt-3 active-scale shadow-[0_0_15px_rgba(225,29,72,0.4)]">割り当てる</button>
+                <button onclick="closeModal('modal-council-add-clean')" class="text-slate-400 text-center font-bold text-xs mt-1 p-2">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-council-add-sched" class="modal-overlay" style="z-index: 120;">
+        <div class="modal-content">
+            <h3 class="font-black text-lg mb-4 text-white">📅 スケジュール予定の登録</h3>
+            <div class="flex flex-col gap-3">
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">予定名</label><input type="text" id="cs-title" placeholder="（例: 第1回 学生会総会）"></div>
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">対象団体・担当 (複数選択可能)</label><select id="cs-assign" multiple size="4" class="h-28"></select></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">日付</label><input type="date" id="cs-date"></div>
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">時間</label><input type="time" id="cs-time"></div>
+                </div>
+                <div><label class="text-[10px] font-bold text-slate-400 block mb-1">場所</label><input type="text" id="cs-loc" placeholder="（例: 第一会議室 / オンライン）"></div>
+                <button onclick="saveCouncilSched()" class="bg-blue-600 text-white p-3.5 rounded-xl font-black mt-3 active-scale shadow-[0_0_15px_rgba(37,99,235,0.4)]">スケジュールを登録</button>
+                <button onclick="closeModal('modal-council-add-sched')" class="text-slate-400 text-center font-bold text-xs mt-1 p-2">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-clean-execution" class="modal-overlay" style="z-index: 130;">
+        <div class="modal-content max-w-sm">
+            <h3 class="font-black text-lg mb-2 text-white">🧹 掃除完了チェックリスト</h3>
+            <p class="text-[10px] font-bold text-slate-400 mb-5">全項目実施後、チェックをつけてください。</p>
+            <input type="hidden" id="ce-id">
+            <div class="flex flex-col gap-3 mb-6">
+                <label class="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl border border-white/10 cursor-pointer">
+                    <input type="checkbox" class="ce-chk w-5 h-5 accent-blue-500"> <span class="text-xs font-bold text-slate-200">床をほうきではく</span>
+                </label>
+                <label class="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl border border-white/10 cursor-pointer">
+                    <input type="checkbox" class="ce-chk w-5 h-5 accent-blue-500"> <span class="text-xs font-bold text-slate-200 leading-tight">集めたごみを塵取りで回収して捨てる</span>
+                </label>
+                <label class="flex items-center gap-3 bg-slate-900 p-4 rounded-2xl border border-white/10 cursor-pointer">
+                    <input type="checkbox" class="ce-chk w-5 h-5 accent-blue-500"> <span class="text-xs font-bold text-slate-200 leading-tight">ごみ箱のごみが半分以上の場合は捨てる</span>
+                </label>
+            </div>
+            <div class="flex gap-3">
+                <button class="flex-1 bg-slate-800 text-slate-300 p-3.5 rounded-xl font-bold text-sm active-scale" onclick="closeModal('modal-clean-execution')">キャンセル</button>
+                <button class="flex-1 bg-green-600 text-white p-3.5 rounded-xl font-black text-sm active-scale shadow-[0_0_15px_rgba(22,163,74,0.4)]" onclick="submitCleanComplete()">完了を報告</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, getDocs, query, where, deleteDoc, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        // ★★★ Firebase Config (必ず書き換えてください) ★★★
+        const firebaseConfig = {
+            apiKey: "AIzaSyDDMbHxYMJYW9rjVMbOYIhZipVAN2ztWow",
+            authDomain: "gakuseikai-room-reservation.firebaseapp.com",
+            projectId: "gakuseikai-room-reservation",
+            storageBucket: "gakuseikai-room-reservation.firebasestorage.app",
+            messagingSenderId: "524408876343",
+            appId: "1:524408876343:web:2d066e2a4932dc512dbeb2",
+            measurementId: "G-QBPKRCN5GL"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        const ORGS = ["その他の団体", "学生会役員・執行部", "高専祭実行委員会", "行事委員会", "学生広報室"];
+        const ROOT_EMAILS = ["s2301076@sendai-nct.jp", "s2501014@sendai-nct.jp"];
+        const ROLES = ["会長", "副会長", "監事", "会計長", "会計", "総務長", "総務", "広報長", "広報", "書記", "運動部長", "文化部長", "執行部"];
+        const DEPTS = ["統括局", "会計局", "総務局", "企画広報局"];
+        const DEPT_SECS = {"統括局": [""], "会計局": [""], "総務局": ["総務課", "委員監督課"], "企画広報局": ["企画課", "広報監督課"]};
+        const DEPT_ROLES = ["局長", "副局長", "課長", "副課長"];
+
+        let currentUser = null, userData = null, isUserRoot = false, isUserAdmin = false, isCouncilMember = false, currentAdminTab = 'pending';
+        let allApprovedReservations = [];
+        let calendarObj = null;
+
+        // 過去ログトグルフラグ
+        let showPast = { reservations: false, tasks: false, cleanings: false, schedules: false };
+
+        const getTodayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+        const isPastDate = (dateStr) => dateStr < getTodayStr();
+        const ensureDate = (v) => { if(!v) return new Date(); if(v.toDate) return v.toDate(); if(v.seconds) return new Date(v.seconds*1000); return new Date(v); };
+        
+        window.closeModal = (id) => document.getElementById(id).classList.remove('show');
+        window.logout = () => signOut(auth).then(() => location.reload());
+        window.login = () => signInWithPopup(auth, provider).catch(e=>console.error(e));
+        
+        window.togglePast = (type) => { 
+            showPast[type] = !showPast[type]; 
+            const btnMap = { reservations: 'btn-toggle-res', tasks: 'btn-toggle-task', cleanings: 'btn-toggle-clean', schedules: 'btn-toggle-sched' };
+            const labelMap = { reservations: '予約', tasks: 'タスク', cleanings: '当番', schedules: '予定' };
+            document.getElementById(btnMap[type]).innerText = showPast[type] ? `直近・未完了の${labelMap[type]}のみ表示` : `過去・完了済みの${labelMap[type]}を表示する`;
+            if(type==='reservations') openReservationListModal(); else switchCouncilTab(type==='schedules'?'sched':'task'); 
+        };
+
+        const getTitle = (u) => {
+            if(!u.org || u.org === "その他の団体") return "一般ユーザー（その他の団体）";
+            if(u.org !== "学生会役員・執行部") return u.org;
+            let t = u.councilRole || ""; let d = (u.councilDept||"") + (u.councilSection||"") + (u.councilDeptRole ? " "+u.councilDeptRole : "");
+            return t && d ? `${t} / ${d}` : (t || d || "学生会");
+        };
+
+        function normRes(r) {
+            let nD = r.date || ""; let nS = r.start || ""; let nE = r.end || ""; let nG = r.group || "団体名未設定"; let nP = r.purpose || "未入力";
+            if (r.start && typeof r.start === 'object' && r.start.seconds) {
+                let sD = ensureDate(r.start); let eD = ensureDate(r.end);
+                nD = `${sD.getFullYear()}-${String(sD.getMonth()+1).padStart(2,'0')}-${String(sD.getDate()).padStart(2,'0')}`; nS = `${String(sD.getHours()).padStart(2,'0')}:${String(sD.getMinutes()).padStart(2,'0')}`; nE = `${String(eD.getHours()).padStart(2,'0')}:${String(eD.getMinutes()).padStart(2,'0')}`;
+            }
+            return {...r, date: nD, start: nS, end: nE, group: nG, purpose: nP, adminMessage: r.adminMessage||""};
+        }
+
+        function isTargetUser(assignData, uData) {
+            if (!assignData) return false;
+            const arr = Array.isArray(assignData) ? assignData : [assignData];
+            if (arr.includes("役員・執行部全体") && isCouncilMember) return true;
+            const matchTargets = [uData.realName];
+            if (uData.org && uData.org !== "その他の団体") matchTargets.push(uData.org);
+            if (uData.councilDept) matchTargets.push(uData.councilDept);
+            if (uData.councilDept && uData.councilSection) matchTargets.push(uData.councilDept + " " + uData.councilSection);
+            return arr.some(a => matchTargets.includes(a));
+        }
+
+        try { listenEmergencyBroadcast(); listenKeyStatus(); listenBoard(); listenReservationsForBanner(); } catch(e) {}
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user; isUserRoot = ROOT_EMAILS.includes(user.email);
+                try {
+                    const snap = await getDoc(doc(db, "users", user.uid));
+                    if (snap.exists()) {
+                        userData = snap.data();
+                        if(!userData.org) userData.org = (userData.councilRole || userData.councilDept) ? "学生会役員・執行部" : "その他の団体"; 
+                        if(!userData.isApproved && !isUserRoot) { document.getElementById("gate-screen").classList.remove("hidden"); return; }
+                        isUserAdmin = isUserRoot || userData.role === "admin";
+                        isCouncilMember = isUserAdmin || (userData.org && userData.org !== "その他の団体"); 
+                        setupUI();
+                    } else {
+                        document.getElementById("reg-role-selectors").innerHTML = buildRoleSelects('reg');
+                        document.getElementById("modal-initial-reg").classList.add('show');
+                    }
+                } catch(e) { console.error("Auth Fetch Error:", e); }
+            } else {
+                document.getElementById("gate-screen").classList.add("hidden"); document.getElementById("modal-initial-reg").classList.remove('show');
+                document.getElementById("profile-banner").classList.add("hidden"); document.getElementById("user-info").classList.add("hidden");
+                document.getElementById("btn-login").classList.remove("hidden"); if(document.getElementById("login-alert")) document.getElementById("login-alert").classList.remove("hidden");
+            }
+        });
+
+        function setupUI() {
+            document.getElementById("gate-screen").classList.add("hidden"); document.getElementById("btn-login").classList.add("hidden");
+            document.getElementById("user-info").classList.remove("hidden"); document.getElementById("profile-banner").classList.remove("hidden");
+            if(document.getElementById("login-alert")) document.getElementById("login-alert").classList.add("hidden");
+            
+            document.getElementById("banner-name").innerText = userData.realName;
+            document.getElementById("banner-class").innerText = userData.userClass;
+            document.getElementById("banner-role").innerText = getTitle(userData);
+            
+            if(isUserAdmin) document.getElementById("btn-admin-dashboard").classList.remove("hidden");
+            if(isUserRoot) { document.getElementById("btn-root-dashboard").classList.remove("hidden"); document.getElementById("btn-add-clean").classList.remove("hidden"); }
+
+            document.getElementById("council-upcoming-schedule-banner").classList.toggle("hidden", !isCouncilMember);
+            if(isCouncilMember) { listenCouncilSchedulesForBanner(); }
+            
+            listenMyUrgentTasks(); // 全員呼ぶ(予約バッジのため)
+            setupGlobalNotifications();
+
+            ['btn-rent', 'btn-open', 'btn-lock', 'btn-return'].forEach(id => document.getElementById(id).disabled = false);
+            document.getElementById("board-now-input").disabled = false; document.getElementById("btn-board-submit").disabled = false;
+        }
+
+        // 通知バッジシステム
+        function setupGlobalNotifications() {
+            onSnapshot(collection(db, "reservations"), (snapshot) => {
+                let count = 0; snapshot.forEach(doc => { if(doc.data().status === 'pending') count++; });
+                const bAdmin = document.getElementById("badge-admin"); if(bAdmin) bAdmin.classList.toggle("hidden", count === 0);
+            });
+            onSnapshot(collection(db, "users"), (snapshot) => {
+                let count = 0; snapshot.forEach(doc => { if(!doc.data().isApproved) count++; });
+                const bRoot = document.getElementById("badge-root"); if(bRoot) bRoot.classList.toggle("hidden", count === 0);
+            });
+        }
+
+        // 緊急配信 (Root強制削除対応)
+        function listenEmergencyBroadcast() {
+            onSnapshot(collection(db, "emergencyBroadcasts"), snap => {
+                const now = new Date(); const container = document.getElementById("global-emergency-container"); container.innerHTML = "";
+                let active = []; snap.forEach(d => { const b = {id: d.id, ...d.data()}; if(new Date(b.startTime) <= now && new Date(b.endTime) >= now) active.push(b); });
+                if(active.length > 0) {
+                    active.forEach(b => {
+                        container.innerHTML += `<div class="bg-red-600/90 backdrop-blur-md border border-red-500/50 text-white rounded-xl text-center py-3 px-4 mx-4 mt-4 text-xs font-black shadow-[0_0_20px_rgba(220,38,38,0.4)] animate-pulse-fast cursor-pointer" onclick="deleteEmergencyBroadcastFromRoot('${b.id}')">🚨 緊急情報: ${b.text} <span class="text-[9px] font-normal opacity-80 ml-2">by ${b.author}</span></div>`;
+                    });
+                }
+            });
+        }
+        window.deleteEmergencyBroadcastFromRoot = async (id) => { if(isUserRoot && confirm("【Root権限】この緊急配信を強制削除しますか？")) { await deleteDoc(doc(db, "emergencyBroadcasts", id)); openRootDashboard(); } };
+        window.saveBroadcast = async () => {
+            if(!isUserAdmin && !isUserRoot) return alert("権限がありません。");
+            const text = document.getElementById("em-text").value.trim(); const st = document.getElementById("em-start").value; const ed = document.getElementById("em-end").value;
+            if(!text || !st || !ed) return alert("すべての項目を入力してください");
+            await addDoc(collection(db, "emergencyBroadcasts"), {text, author: userData.realName, authorUid: currentUser.uid, startTime: st, endTime: ed});
+            alert("配信を開始しました"); document.getElementById("em-text").value = ""; closeModal('modal-mypage');
+        };
+        window.deleteMyBroadcast = async () => {
+            const snap = await getDocs(query(collection(db, "emergencyBroadcasts"), where("authorUid", "==", currentUser.uid)));
+            if(snap.empty) return alert("あなたが配信中の情報はありません");
+            snap.forEach(async d => await deleteDoc(doc(db, "emergencyBroadcasts", d.id))); alert("配信を終了しました"); closeModal('modal-mypage');
+        };
+
+        // ホームアラート ＆ マイページ通知バッジ (予約承認/却下も検知)
+        function listenMyUrgentTasks() {
+            const banner = document.getElementById("my-urgent-tasks-banner");
+            const badge = document.getElementById("mypage-badge");
+            let tList = []; let cList = []; let rCount = 0;
+
+            const updateAlertUI = () => {
+                const total = tList.length + cList.length + rCount;
+                if(badge) badge.classList.toggle("hidden", total === 0);
+                if(banner) {
+                    banner.innerHTML = "";
+                    if(tList.length + cList.length === 0) { banner.classList.add("hidden"); banner.classList.remove("flex"); }
+                    else {
+                        banner.classList.remove("hidden"); banner.classList.add("flex");
+                        tList.forEach(t => {
+                            let diff = (new Date(t.deadline) - new Date().setHours(0,0,0,0)) / (1000*60*60*24);
+                            let colorClass = diff <= 1 ? "bg-red-950/40 border-red-500/50 text-red-200" : diff <= 3 ? "bg-amber-950/30 border-amber-500/50 text-amber-200" : "bg-slate-800/50 border-white/10 text-slate-200";
+                            banner.innerHTML += `<div class="p-4 border rounded-2xl shadow-md text-xs flex justify-between items-center cursor-pointer active-scale ${colorClass}" onclick="openCouncilSystem()"><span class="font-black truncate">📋 ${t.title}</span><span class="text-[10px] font-bold bg-black/30 px-2.5 py-1 rounded-lg ml-2 whitespace-nowrap">期日: ${t.deadline}</span></div>`;
+                        });
+                        cList.forEach(c => {
+                            let diff = (new Date(c.deadline) - new Date().setHours(0,0,0,0)) / (1000*60*60*24);
+                            let colorClass = diff <= 1 ? "bg-red-950/40 border-red-500/50 text-red-200" : "bg-rose-950/30 border-rose-500/50 text-rose-200";
+                            banner.innerHTML += `<div class="p-4 border rounded-2xl shadow-md text-xs flex justify-between items-center cursor-pointer active-scale ${colorClass}" onclick="openCouncilSystem()"><span class="font-black truncate">🧹 掃除を実行してください</span><span class="text-[10px] font-bold bg-black/30 px-2.5 py-1 rounded-lg ml-2 whitespace-nowrap">締切: ${c.deadline}</span></div>`;
+                        });
+                    }
+                }
+            };
+
+            if(isCouncilMember) {
+                onSnapshot(collection(db, "councilTasks"), snap => { tList = []; snap.forEach(d => { const t = d.data(); if(t.status === 'pending' && isTargetUser(t.assign, userData)) tList.push(t); }); updateAlertUI(); });
+                onSnapshot(collection(db, "councilCleanings"), snap => { cList = []; snap.forEach(d => { const c = d.data(); if(c.status !== 'completed' && isTargetUser(c.assign, userData) && getTodayStr() >= c.startDate) cList.push(c); }); updateAlertUI(); });
+            } else { tList = []; cList = []; updateAlertUI(); }
+
+            // 予約承認/却下バッジ連動 (自分が申請した未来の予約が対象)
+            onSnapshot(collection(db, "reservations"), snap => {
+                rCount = 0;
+                snap.forEach(d => {
+                    const r = normRes(d.data());
+                    if (r.userEmail === currentUser.email && (r.status === 'approved' || r.status === 'rejected') && r.date >= getTodayStr()) { rCount++; }
+                });
+                updateAlertUI();
+            });
+        }
+
+        // 予約バナー
+        function listenReservationsForBanner() {
+            onSnapshot(collection(db, "reservations"), (snapshot) => {
+                allApprovedReservations = [];
+                snapshot.forEach(doc => {
+                    const data = normRes(doc.data());
+                    if(data.status === "approved" && data.date && data.start) {
+                        const parts = data.date.split('-'); const sParts = data.start.split(':'); const eParts = data.end.split(':');
+                        if(parts.length===3 && sParts.length===2) {
+                            const startObj = new Date(parts[0], parts[1]-1, parts[2], sParts[0], sParts[1]); const endObj = new Date(parts[0], parts[1]-1, parts[2], eParts[0], eParts[1]);
+                            allApprovedReservations.push({ id: doc.id, group: data.group, start: startObj, end: endObj, rawDate: data.date, rawStart: data.start, userName: data.userName, purpose: data.purpose });
+                        }
+                    }
+                });
+                updateUpcomingReservationBanner();
+            });
+        }
+        function updateUpcomingReservationBanner() {
+            const banner = document.getElementById("upcoming-reservation-banner"); if(!banner) return;
+            const now = new Date(); const currentRes = allApprovedReservations.find(r => r.start <= now && r.end > now);
+            if(currentRes) { banner.innerHTML = `<div class="bg-blue-950/40 border border-blue-500/50 text-blue-200 p-5 rounded-3xl text-xs font-black text-center shadow-[0_0_15px_rgba(59,130,246,0.15)] animate-pulse-fast">⏰ 会室は現在、利用予約時間内です<br><span class="text-sm mt-1 inline-block text-white tracking-widest">${currentRes.group}</span></div>`; return; }
+            const todayNextRes = allApprovedReservations.filter(r => r.start > now && r.start.getDate() === now.getDate() && r.start.getMonth() === now.getMonth() && r.start.getFullYear() === now.getFullYear()).sort((a,b) => a.start - b.start)[0];
+            if(todayNextRes) { banner.innerHTML = `<div class="cyber-card p-5 rounded-3xl text-xs font-black text-center text-slate-300">📅 本日 ${todayNextRes.rawStart}〜 次の予約が入っています<br><span class="text-sm mt-1 inline-block text-white tracking-widest">（${todayNextRes.group}）</span></div>`; return; }
+            banner.innerHTML = ``;
+        }
+
+        // スケジュールバナー (役員限定)
+        function listenCouncilSchedulesForBanner() {
+            if(!isCouncilMember) return;
+            onSnapshot(collection(db, "councilSchedules"), (snapshot) => {
+                let arr = []; snapshot.forEach(doc => arr.push({id: doc.id, ...doc.data()}));
+                const todayStr = getTodayStr(); const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth()+1).padStart(2,'0')}-${String(tomorrow.getDate()).padStart(2,'0')}`;
+
+                let upcoming = arr.filter(s => s.date >= todayStr && isTargetUser(s.assign, userData)).sort((a,b) => (a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0, 10);
+                const list = document.getElementById("council-upcoming-schedule-list"); list.innerHTML = "";
+                
+                if(upcoming.length === 0) { list.innerHTML = `<p class="text-[11px] font-bold text-slate-500">対象の直近予定はありません</p>`; return; }
+                upcoming.forEach(s => {
+                    let assignStr = Array.isArray(s.assign) ? s.assign.join(", ") : s.assign;
+                    let hClass = s.date === todayStr ? "bg-red-950/20 border-red-900/50 text-red-300" : "bg-slate-900 border-white/5 text-slate-300";
+                    let badge = s.date === todayStr ? `<span class="bg-red-600 text-white px-2 py-0.5 rounded text-[9px] ml-2 shadow-[0_0_8px_rgba(220,38,38,0.5)]">本日</span>` : '';
+                    list.innerHTML += `<div class="p-3.5 rounded-xl border ${hClass} text-xs flex flex-col"><div class="flex items-center"><span class="font-black text-sm text-white truncate">${s.title}</span>${badge}</div><span class="text-[10px] font-bold opacity-70 mt-1.5 truncate">🗓️ ${s.date} ${s.time||''} / 対象: ${assignStr} @ ${s.loc||'未定'}</span></div>`;
+                });
+            });
+        }
+
+        // --- 登録 ---
+        function buildRoleSelects(prefix, u = {}) {
+            return `
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="text-[9px] font-bold text-slate-400 block mb-1">役職</label><select id="${prefix}-r" class="text-[10px]"><option value="">なし</option>${ROLES.map(r=>`<option value="${r}" ${u.councilRole===r?'selected':''}>${r}</option>`).join('')}</select></div>
+                    <div><label class="text-[9px] font-bold text-slate-400 block mb-1">局（部署）</label><select id="${prefix}-d" class="text-[10px]" onchange="updateSec('${prefix}')"><option value="">なし</option>${DEPTS.map(d=>`<option value="${d}" ${u.councilDept===d?'selected':''}>${d}</option>`).join('')}</select></div>
+                    <div><label class="text-[9px] font-bold text-slate-400 block mb-1">課</label><select id="${prefix}-s" class="text-[10px]"><option value="">なし</option></select></div>
+                    <div><label class="text-[9px] font-bold text-slate-400 block mb-1">部署内役職</label><select id="${prefix}-dr" class="text-[10px]"><option value="">なし</option>${DEPT_ROLES.map(dr=>`<option value="${dr}" ${u.councilDeptRole===dr?'selected':''}>${dr}</option>`).join('')}</select></div>
+                </div>
+            `;
+        }
+        window.updateSec = (prefix) => { const d = document.getElementById(`${prefix}-d`).value; const s = document.getElementById(`${prefix}-s`); s.innerHTML = `<option value="">なし</option>` + (DEPT_SECS[d] || []).map(sec=>`<option value="${sec}">${sec}</option>`).join(''); };
+        window.toggleRegCouncilForm = () => document.getElementById("reg-council-fields").classList.toggle("hidden", document.getElementById("reg-org").value !== "学生会役員・執行部");
+
+        window.saveInitialProfile = async () => {
+            const name = document.getElementById("reg-name").value.trim(); const cls = document.getElementById("reg-class").value.trim(); const org = document.getElementById("reg-org").value;
+            if(!name || !cls) return alert("氏名とクラスは入力必須です。");
+            const data = { realName: name, userClass: cls, email: currentUser.email, isApproved: isUserRoot, role: isUserRoot?'admin':'user', org: org, councilRole: org==='学生会役員・執行部'?document.getElementById("reg-r").value:"", councilDept: org==='学生会役員・執行部'?document.getElementById("reg-d").value:"", councilSection: org==='学生会役員・執行部'?document.getElementById("reg-s").value:"", councilDeptRole: org==='学生会役員・執行部'?document.getElementById("reg-dr").value:"", createdAt: new Date() };
+            await setDoc(doc(db, "users", currentUser.uid), data); location.reload();
+        };
+
+        // --- マイページ ---
+        window.openMyPage = async () => {
+            try {
+                document.getElementById("mypage-email").innerText = currentUser.email;
+                document.getElementById("mypage-edit-name").value = userData.realName; document.getElementById("mypage-edit-class").value = userData.userClass;
+                document.getElementById("mypage-user-badge").innerText = getTitle(userData);
+                document.getElementById("mypage-council-section").classList.toggle("hidden", !isCouncilMember);
+                document.getElementById("mypage-emergency-section").classList.toggle("hidden", !(isUserAdmin || isUserRoot));
+
+                const snapRes = await getDocs(query(collection(db, "reservations"), where("userEmail", "==", currentUser.email)));
+                const listRes = document.getElementById("my-reservations-list"); listRes.innerHTML = "";
+                snapRes.forEach(d => {
+                    const res = normRes(d.data()); const sMap = { 'approved': '承認済', 'pending': '審査中', 'rejected': '却下' };
+                    const sClass = res.status==='approved'?'bg-green-950/50 text-green-400 border-green-800/50':res.status==='rejected'?'bg-red-950/50 text-red-400 border-red-800/50':'bg-amber-950/50 text-amber-400 border-amber-800/50';
+                    let msg = res.adminMessage ? `<div class="mt-2 p-2.5 bg-slate-900 rounded-lg text-[10px] text-slate-400 font-bold border border-white/5">運営通知: ${res.adminMessage}</div>` : '';
+                    listRes.innerHTML += `<div class="p-4 bg-slate-800/30 rounded-2xl border border-white/5 text-xs flex flex-col text-left mb-2"><div class="flex justify-between items-start"><div><p class="font-black text-slate-200">${res.group}</p><p class="text-[10px] font-bold text-slate-500 mt-1">${res.date} ${res.start}〜${res.end}</p></div><span class="text-[10px] px-2.5 py-1 rounded-md border font-black whitespace-nowrap ${sClass}">${sMap[res.status]||res.status}</span></div>${msg}</div>`;
+                });
+                if(listRes.innerHTML==="") listRes.innerHTML='<p class="text-center text-slate-500 text-[10px] py-2 font-bold">予約データはありません</p>';
+
+                if(isCouncilMember) {
+                    const todoList = document.getElementById("mypage-todo-list"); todoList.innerHTML = "";
+                    const snapT = await getDocs(collection(db, "councilTasks"));
+                    snapT.forEach(d => { const t = d.data(); if(t.status !== 'completed' && isTargetUser(t.assign, userData)) { todoList.innerHTML += `<div class="p-3 bg-indigo-950/20 border border-indigo-900/30 rounded-xl text-xs text-left mb-2"><p class="font-black text-indigo-300">📋 ${t.title}</p><p class="text-[9px] text-indigo-500 mt-1 font-bold">期限: ${t.deadline} [${t.status==='review'?'承認待ち':'未完了'}]</p></div>`; } });
+                    const snapC = await getDocs(collection(db, "councilCleanings"));
+                    snapC.forEach(d => { const c = d.data(); if(c.status !== 'completed' && isTargetUser(c.assign, userData)) { let waitStr = c.startDate > getTodayStr() ? `(※${c.startDate}から実施可)` : ''; todoList.innerHTML += `<div class="p-3 bg-rose-950/20 border border-rose-900/30 rounded-xl text-xs text-left mb-2"><p class="font-black text-rose-400">🧹 掃除当番</p><p class="text-[9px] text-rose-500 mt-1 font-bold">期間: ${c.startDate} 〜 ${c.deadline} ${waitStr}</p></div>`; } });
+                    if(todoList.innerHTML==="") todoList.innerHTML='<p class="text-center text-slate-500 text-[10px] py-2 font-bold">対応が必要なタスクはありません</p>';
+
+                    const schedList = document.getElementById("mypage-sched-list"); schedList.innerHTML = "";
+                    const snapS = await getDocs(collection(db, "councilSchedules"));
+                    snapS.forEach(d => { const s = d.data(); if(s.date >= getTodayStr() && isTargetUser(s.assign, userData)) { schedList.innerHTML += `<div class="p-3 bg-slate-800/30 border border-white/5 rounded-xl text-xs text-left mb-2"><p class="font-black text-slate-300">${s.title}</p><p class="text-[9px] text-slate-500 mt-1 font-bold">🗓️ ${s.date} ${s.time||''} @ ${s.loc||'未定'}</p></div>`; } });
+                    if(schedList.innerHTML==="") schedList.innerHTML='<p class="text-center text-slate-500 text-[10px] py-2 font-bold">関係する今後の予定はありません</p>';
+                }
+                document.getElementById("modal-mypage").classList.add('show');
+            } catch(e) { console.error(e); alert("読み込み失敗"); }
+        };
+        window.updateProfileSelf = async () => {
+            const nN = document.getElementById("mypage-edit-name").value.trim(); const nC = document.getElementById("mypage-edit-class").value.trim();
+            if(!nN || !nC) return alert("空欄にはできません"); await setDoc(doc(db, "users", currentUser.uid), {realName: nN, userClass: nC}, {merge:true}); alert("保存しました"); location.reload();
+        };
+
+        // --- KEY STATUS ---
+        function listenKeyStatus() {
+            onSnapshot(doc(db, "system", "keyStatus"), (snap) => {
+                if(snap.exists()) {
+                    const d = snap.data(); const labels = {rent:'借用', open:'開放', lock:'施錠', return:'学生課に返却済み'};
+                    if(d.action === 'rent' || d.action === 'lock') {
+                        document.getElementById("status-display").innerText = d.updatedBy ? `${d.updatedBy} が保持中` : (labels[d.action] + '中'); document.getElementById("status-display").className = "text-2xl sm:text-3xl font-black text-red-500 tracking-tight drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]";
+                    } else if (d.action === 'return') {
+                        document.getElementById("status-display").innerText = labels[d.action]; document.getElementById("status-display").className = "text-xl sm:text-2xl font-black text-slate-500 tracking-tight";
+                    } else {
+                        document.getElementById("status-display").innerText = (labels[d.action] || '不明') + '中'; document.getElementById("status-display").className = "text-2xl sm:text-3xl font-black text-blue-400 tracking-tight drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]";
+                    }
+                    document.getElementById("status-color-bar").className = `absolute top-0 left-0 w-full h-1 ${d.action==='open'?'bg-blue-500 shadow-[0_0_10px_#3b82f6]':(d.action==='rent'||d.action==='lock')?'bg-red-500 shadow-[0_0_10px_#ef4444]':'bg-slate-700'}`;
+                    if(d.updatedBy) { document.getElementById("status-detail").classList.remove("hidden"); document.getElementById("detail-user").innerText = d.updatedBy; const date = ensureDate(d.updatedAt); document.getElementById("detail-time").innerText = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`; }
+                }
+            });
+        }
+        window.updateKeyStatus = async (action) => { if(!userData) return alert("ログインしてください"); if(!confirm("ステータスを変更しますか？")) return; await setDoc(doc(db, "system", "keyStatus"), {action, updatedBy: userData.realName, updatedAt: new Date()}); await addDoc(collection(db, "keyLogs"), {name: userData.realName, action, time: new Date()}); };
+        window.openKeyHistoryModal = async () => {
+            const snap = await getDocs(query(collection(db, "keyLogs"), orderBy("time", "desc"), limit(30)));
+            const list = document.getElementById("key-history-list"); list.innerHTML = "";
+            const labels = {rent:'🔑 借用', open:'🔓 開錠', lock:'🔒 施錠', return:'📥 返却'};
+            snap.forEach(d => {
+                const log = d.data(); const date = ensureDate(log.time);
+                list.innerHTML += `<div class="p-4 bg-slate-900 rounded-2xl border border-white/5 flex justify-between items-center"><div class="font-black text-sm text-slate-300">${labels[log.action]} <span class="text-[10px] text-slate-500 ml-2 font-bold">by ${log.name}</span></div><span class="text-[10px] text-slate-500 font-mono font-bold">${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}</span></div>`;
+            });
+            document.getElementById("modal-key-history").classList.add('show');
+        };
+
+        // --- 掲示板 ---
+        function listenBoard() {
+            onSnapshot(query(collection(db, "boardNow"), orderBy("time", "desc"), limit(30)), (snap) => {
+                const list = document.getElementById("board-now-list"); list.innerHTML = "";
+                snap.forEach(d => {
+                    const b = d.data(); const t = ensureDate(b.time);
+                    list.innerHTML += `<div class="bg-slate-900 p-4 rounded-2xl border border-white/5 text-[11px] font-bold shadow-sm"><p class="text-slate-300">${b.text}</p><div class="flex justify-between text-[10px] text-slate-500 mt-2 font-black"><span>${b.author}</span><span>${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}</span></div></div>`;
+                });
+            });
+        }
+        window.postBoardNow = async () => {
+            if(!userData) return alert("ログインしてください");
+            const input = document.getElementById("board-now-input"); 
+            if(!input.value.trim()) return;
+            if(input.value.length > 30) return alert("30文字以内で入力してください");
+            await addDoc(collection(db, "boardNow"), {text: input.value.trim(), author: userData.realName, time: new Date()}); input.value = "";
+        };
+
+        // --- 予約 ---
+        window.openReservationListModal = async () => {
+            if(!currentUser) return alert("ログインが必要です。");
+            const snap = await getDocs(query(collection(db, "reservations"), where("status", "==", "approved")));
+            const list = document.getElementById("user-res-list-content"); list.innerHTML = "";
+            let arr = []; snap.forEach(d => arr.push(normRes(d.data())));
+            arr.sort((a,b) => a.date.localeCompare(b.date));
+            let matchCount = 0;
+            arr.forEach(e => {
+                const pastCond = isPastDate(e.date); if (showPast.reservations ? !pastCond : pastCond) return; matchCount++;
+                list.innerHTML += `<div class="bg-slate-900 p-4 rounded-2xl border border-white/5 text-left"><p class="font-black text-sm text-slate-200">${e.group}</p><p class="text-[11px] text-blue-400 font-black mt-1.5">🗓️ ${e.date} (${e.start} 〜 ${e.end})</p><p class="text-[10px] text-slate-400 mt-2.5 bg-white/5 p-2 rounded-lg font-bold">目的: ${e.purpose}</p></div>`;
+            });
+            if(matchCount === 0) list.innerHTML = `<p class="text-xs text-slate-500 text-center py-5 font-bold">該当データはありません</p>`;
+            document.getElementById("modal-user-reservations").classList.add('show');
+        };
+        window.openCalendarModal = () => {
+            document.getElementById("modal-user-reservations").classList.remove('show'); document.getElementById("modal-calendar").classList.add('show');
+            setTimeout(() => {
+                if(!calendarObj) {
+                    calendarObj = new FullCalendar.Calendar(document.getElementById('calendar'), {
+                        initialView: window.innerWidth < 640 ? 'timeGridDay' : 'timeGridWeek', locale: 'ja', height: '100%', slotMinTime: '07:00:00', slotMaxTime: '19:00:00', allDaySlot: false,
+                        headerToolbar: { left: 'prev,next', center: 'title', right: 'timeGridWeek,timeGridDay' },
+                        eventClick: function(info) { alert(`【予約詳細】\n団体: ${info.event.title}\n時間: ${info.event.start.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} - ${info.event.end.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}\n予約者: ${info.event.extendedProps.userName}\n目的: ${info.event.extendedProps.purpose}`); }
+                    });
+                    calendarObj.render();
+                }
+                calendarObj.removeAllEvents(); const events = allApprovedReservations.map(r => ({ id: r.id, title: r.group, start: r.start, end: r.end, extendedProps: { userName: r.userName, purpose: r.purpose }, backgroundColor: '#3b82f6', borderColor: 'transparent' }));
+                calendarObj.addEventSource(events); calendarObj.updateSize();
+            }, 200);
+        };
+        window.openNewBookingForm = () => { document.getElementById("booking-title").innerText = "新規予約申請"; document.getElementById("edit-id").value = ""; document.getElementById("book-date").value = getTodayStr(); document.getElementById("book-start").value = "07:00"; document.getElementById("book-end").value = "19:00"; document.getElementById("book-group").value = ""; document.getElementById("book-purpose").value = ""; document.getElementById("modal-booking").classList.add('show'); };
+        window.saveReservation = async () => {
+            const id = document.getElementById("edit-id").value; const data = { date: document.getElementById("book-date").value, start: document.getElementById("book-start").value, end: document.getElementById("book-end").value, group: document.getElementById("book-group").value.trim(), purpose: document.getElementById("book-purpose").value.trim(), userName: userData.realName, userEmail: currentUser.email, status: isUserAdmin ? 'approved' : 'pending' };
+            if(!data.date || !data.start || !data.end || !data.group) return alert("必須項目を入力してください");
+            if(id) await setDoc(doc(db, "reservations", id), data, {merge:true}); else await addDoc(collection(db, "reservations"), data);
+            alert("送信しました"); document.getElementById("modal-booking").classList.remove('show'); if(isUserAdmin) openAdminDashboard(); else openReservationListModal();
+        };
+
+        // --- Admin予約管理 ---
+        window.openAdminDashboard = () => { switchAdminTab('pending'); document.getElementById("modal-admin-dashboard").classList.add('show'); };
+        window.switchAdminTab = async (tab) => {
+            currentAdminTab = tab;
+            document.getElementById("admin-tab-pending").className = tab==='pending' ? "flex-1 py-2 rounded-xl font-black text-xs bg-amber-600 text-white shadow-[0_0_10px_rgba(217,119,6,0.3)] transition" : "flex-1 py-2 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-800/50 transition";
+            document.getElementById("admin-tab-all").className = tab==='all' ? "flex-1 py-2 rounded-xl font-black text-xs bg-slate-700 text-white shadow-sm transition" : "flex-1 py-2 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-800/50 transition";
+            const snap = await getDocs(collection(db, "reservations")); const list = document.getElementById("admin-res-list"); list.innerHTML = ""; let count = 0;
+            snap.forEach(d => {
+                const res = normRes(d.data()); const rid = d.id; if(tab==='pending' && res.status !== 'pending') return; count++;
+                const block = document.createElement("div"); block.className = "p-4 bg-slate-900 rounded-2xl border border-white/5 text-left";
+                let actionBtnHTML = res.status === 'pending' ? `<button class="bg-green-600 text-white px-4 py-2 rounded-xl font-black text-xs active-scale" onclick="approveReservation('${rid}')">承認</button><button class="bg-red-600 text-white px-4 py-2 rounded-xl font-black text-xs active-scale" onclick="rejectReservation('${rid}')">却下</button>` : '';
+                block.innerHTML = `<div class="flex justify-between items-center font-black text-sm mb-1.5"><span class="text-slate-200">${res.group}</span><span class="text-[9px] px-2.5 py-1 rounded-md ${res.status==='approved'?'bg-green-900/50 text-green-400':res.status==='rejected'?'bg-red-900/50 text-red-400':'bg-amber-900/50 text-amber-400'}">${res.status}</span></div><p class="text-[10px] text-slate-500 font-bold">${res.date} ${res.start}〜${res.end} / 申請者: ${res.userName}</p><p class="text-[11px] text-slate-400 bg-white/5 p-2.5 rounded-xl mt-2.5 font-bold">目的: ${res.purpose}</p><div class="flex gap-2 mt-3">${actionBtnHTML}<button class="flex-1 bg-slate-800 text-slate-300 py-2 rounded-xl font-bold text-xs active-scale" onclick="editReservation('${rid}')">編集</button><button class="bg-slate-800 text-red-400 px-3 py-2 rounded-xl text-xs font-bold active-scale" onclick="deleteReservation('${rid}')">削除</button></div>`;
+                list.appendChild(block);
+            });
+            if(count === 0) list.innerHTML = `<p class="text-xs text-slate-500 text-center py-6 font-bold">データはありません。</p>`;
+        };
+        window.approveReservation = async (id) => { const msg = prompt("注意事項(任意):"); if(msg===null) return; await setDoc(doc(db, "reservations", id), {status:'approved', adminMessage: msg}, {merge:true}); switchAdminTab(currentAdminTab); };
+        window.rejectReservation = async (id) => { const msg = prompt("却下理由(任意):"); if(msg===null) return; await setDoc(doc(db, "reservations", id), {status:'rejected', adminMessage: msg}, {merge:true}); switchAdminTab(currentAdminTab); };
+        window.editReservation = async (id) => { const snap = await getDoc(doc(db, "reservations", id)); const r = normRes(snap.data()); document.getElementById("edit-id").value = id; document.getElementById("book-date").value = r.date; document.getElementById("book-start").value = r.start; document.getElementById("book-end").value = r.end; document.getElementById("book-group").value = r.group; document.getElementById("book-purpose").value = r.purpose; document.getElementById("modal-booking").classList.add('show'); };
+        window.deleteReservation = async (id) => { if(confirm("削除しますか？")) { await deleteDoc(doc(db, "reservations", id)); switchAdminTab(currentAdminTab); } };
+
+        // --- Root管理 ---
+        window.openRootDashboard = async () => {
+            const snapE = await getDocs(collection(db, "emergencyBroadcasts"));
+            const listE = document.getElementById("root-broadcast-list"); listE.innerHTML = "";
+            snapE.forEach(d => { const b = d.data(); listE.innerHTML += `<div class="flex justify-between items-center text-[10px] bg-slate-900 p-3 rounded-xl border border-red-900/30 font-bold"><span class="text-slate-300 truncate pr-2">${b.text} (by ${b.author})</span><button onclick="deleteEmergencyBroadcastFromRoot('${d.id}')" class="text-red-500 bg-red-950/50 px-2 py-1 rounded">削除</button></div>`;});
+            if(listE.innerHTML === "") listE.innerHTML = '<p class="text-center text-slate-500 text-[10px] py-2">配信中の緊急情報なし</p>';
+
+            const snap = await getDocs(collection(db, "users"));
+            const uList = document.getElementById("root-unapproved-user-list"); uList.innerHTML = "";
+            const aList = document.getElementById("root-approved-user-list"); aList.innerHTML = "";
+            
+            snap.forEach(d => {
+                const u = d.data(); const uid = d.id; if(!u.org) u.org = (u.councilRole||u.councilDept) ? "学生会役員・執行部" : "その他の団体";
+                const container = document.createElement("div"); container.className = "bg-slate-900 p-4 rounded-2xl border border-white/5 text-left flex flex-col gap-2";
+                container.innerHTML = `
+                    <div class="flex gap-2 mb-1"><input type="text" id="root-n-${uid}" value="${u.realName}" class="w-full bg-slate-800 p-2.5 rounded-xl font-bold text-xs border border-transparent focus:border-blue-500"><input type="text" id="root-c-${uid}" value="${u.userClass}" class="w-20 bg-slate-800 p-2.5 rounded-xl font-bold text-xs border border-transparent text-center focus:border-blue-500"></div>
+                    <select id="root-org-${uid}" class="w-full bg-slate-800 p-2.5 text-xs font-bold border border-transparent rounded-xl focus:border-blue-500"><option value="その他の団体" ${u.org==='その他の団体'?'selected':''}>その他の団体(一般)</option><option value="学生会役員・執行部" ${u.org==='学生会役員・執行部'?'selected':''}>学生会役員・執行部</option><option value="高専祭実行委員会" ${u.org==='高専祭実行委員会'?'selected':''}>高専祭実行委員会</option><option value="行事委員会" ${u.org==='行事委員会'?'selected':''}>行事委員会</option><option value="学生広報室" ${u.org==='学生広報室'?'selected':''}>学生広報室</option></select>
+                    <div id="root-sel-box-${uid}" class="mt-1 mb-2 ${u.org==='学生会役員・執行部'?'block':'hidden'} bg-slate-800/50 p-3 rounded-xl border border-white/5"></div>
+                    <div class="flex gap-2 mt-1"><button class="flex-1 bg-blue-600 text-white py-2 rounded-xl text-[10px] font-black active-scale" onclick="saveUserFromRoot('${uid}')">保存</button><button class="flex-1 border border-white/10 py-2 rounded-xl text-[10px] font-black active-scale ${u.isApproved?'bg-slate-800 text-slate-500':'bg-emerald-600 text-white'}" onclick="approveUserFromRoot('${uid}')">${u.isApproved?'承認済':'承認する'}</button><button class="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-[10px] font-black active-scale" onclick="toggleAdminFromRoot('${uid}', '${u.role}')">${u.role==='admin'?'Admin解除':'Admin付与'}</button><button class="bg-red-950/50 text-red-500 px-3 py-2 text-[10px] font-bold rounded-xl active-scale" onclick="deleteUserFromRoot('${uid}')">削</button></div>`;
+                
+                if(u.isApproved) aList.appendChild(container); else uList.appendChild(container);
+                document.getElementById(`root-sel-box-${uid}`).innerHTML = buildRoleSelects(`e-${uid}`, u);
+                document.getElementById(`e-${uid}-r`).value = u.councilRole || ""; document.getElementById(`e-${uid}-d`).value = u.councilDept || ""; updateSec(`e-${uid}`); document.getElementById(`e-${uid}-s`).value = u.councilSection || ""; document.getElementById(`e-${uid}-dr`).value = u.councilDeptRole || "";
+                document.getElementById(`root-org-${uid}`).onchange = () => document.getElementById(`root-sel-box-${uid}`).classList.toggle('hidden', document.getElementById(`root-org-${uid}`).value !== '学生会役員・執行部');
+            });
+            if(uList.innerHTML==="") uList.innerHTML='<p class="text-slate-500 text-[10px] py-2 text-center font-bold">承認待ちユーザーなし</p>';
+            document.getElementById("modal-root").classList.add('show');
+        };
+        window.saveUserFromRoot = async (uid) => { const org = document.getElementById(`root-org-${uid}`).value; const data = { realName: document.getElementById(`root-n-${uid}`).value.trim(), userClass: document.getElementById(`root-c-${uid}`).value.trim(), org: org, councilRole: org==='学生会役員・執行部'?document.getElementById(`e-${uid}-r`).value:"", councilDept: org==='学生会役員・執行部'?document.getElementById(`e-${uid}-d`).value:"", councilSection: org==='学生会役員・執行部'?document.getElementById(`e-${uid}-s`).value:"", councilDeptRole: org==='学生会役員・執行部'?document.getElementById(`e-${uid}-dr`).value:"" }; await setDoc(doc(db, "users", uid), data, {merge:true}); alert("保存しました"); openRootDashboard(); };
+        window.approveUserFromRoot = async (uid) => { await setDoc(doc(db, "users", uid), {isApproved: true}, {merge:true}); openRootDashboard(); };
+        window.toggleAdminFromRoot = async (uid, currentRole) => { await setDoc(doc(db, "users", uid), {role: currentRole==='admin'?'user':'admin'}, {merge:true}); openRootDashboard(); };
+        window.deleteUserFromRoot = async (uid) => { if(confirm("削除しますか？")) { await deleteDoc(doc(db, "users", uid)); openRootDashboard(); } };
+
+        // --- 業務システム ---
+        window.openCouncilSystem = () => { if(!isCouncilMember) return alert("各種委員・役員専用です"); switchCouncilTab('task'); document.getElementById("modal-council").classList.add('show'); };
+        window.switchCouncilTab = async (tab) => {
+            document.getElementById("council-task-section").classList.toggle("hidden", tab !== 'task'); document.getElementById("council-sched-section").classList.toggle("hidden", tab !== 'sched');
+            document.getElementById("c-tab-btn-task").className = tab==='task'?"flex-1 py-2 rounded-xl font-black text-xs bg-indigo-600 text-white shadow-[0_0_10px_rgba(79,70,229,0.3)] transition":"flex-1 py-2 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-800 transition";
+            document.getElementById("c-tab-btn-sched").className = tab==='sched'?"flex-1 py-2 rounded-xl font-black text-xs bg-indigo-600 text-white shadow-[0_0_10px_rgba(79,70,229,0.3)] transition":"flex-1 py-2 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-800 transition";
+            
+            if(tab === 'task') {
+                const snapT = await getDocs(collection(db, "councilTasks"));
+                const listT = document.getElementById("council-task-list"); listT.innerHTML = "";
+                let arrT = []; snapT.forEach(d => arrT.push({id:d.id, ...d.data()})); arrT.sort((a,b)=>(a.deadline+(a.time||'')).localeCompare(b.deadline+(b.time||'')));
+                let cT=0;
+                arrT.forEach(t => {
+                    const condPast = t.status === 'completed' || isPastDate(t.deadline);
+                    if(showPast.tasks ? !condPast : condPast) return; cT++;
+                    const block = document.createElement("div"); block.className = "p-4 bg-slate-900 rounded-2xl border border-white/5 text-xs flex flex-col gap-1.5 text-left";
+                    let stateLabel = t.status==='completed'?'✅ 完了':t.status==='review'?'🔍 承認待':'⏳ 進行中';
+                    let isAssignee = isTargetUser(t.assign, userData); let isCreator = t.createdBy === userData.realName; let assignStr = Array.isArray(t.assign) ? t.assign.join(", ") : t.assign;
+                    let actBtn = '';
+                    if(t.status === 'pending' && (isAssignee || isUserRoot || isUserAdmin || isCreator)) actBtn = `<button class="bg-blue-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px] shadow-sm active-scale" onclick="requestTaskReview('${t.id}')">完了申請</button>`;
+                    else if(t.status === 'review' && (isUserRoot || isUserAdmin || isCreator)) actBtn = `<button class="bg-green-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px] shadow-sm active-scale" onclick="approveTaskComplete('${t.id}')">承認する</button>`;
+                    block.innerHTML = `<div class="flex justify-between items-center font-black"><span class="text-slate-200 text-sm">${t.title}</span><span class="text-[9px] text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-white/5">${stateLabel}</span></div><div class="flex justify-between items-center text-[10px] text-slate-500 mt-1"><div class="flex flex-col font-bold"><span>担: ${assignStr} | 依: ${t.createdBy||'不明'}</span><span class="text-indigo-400 mt-0.5">期: ${t.deadline} ${t.time||''}</span></div><div class="flex gap-1.5 items-center">${actBtn}<button class="bg-slate-800 text-slate-400 font-bold px-3 py-1.5 rounded-lg active-scale" onclick="deleteCouncilItem('councilTasks','${t.id}')">×</button></div></div>`;
+                    listT.appendChild(block);
+                });
+                if(cT===0) listT.innerHTML='<p class="text-center text-slate-500 text-[10px] py-4 font-bold">タスクはありません</p>';
+
+                const snapC = await getDocs(collection(db, "councilCleanings"));
+                const listC = document.getElementById("council-clean-list"); listC.innerHTML = "";
+                let arrC = []; snapC.forEach(d => arrC.push({id:d.id, ...d.data()})); arrC.sort((a,b)=>a.deadline.localeCompare(b.deadline));
+                let cC=0;
+                arrC.forEach(c => {
+                    const condPast = c.status === 'completed' || isPastDate(c.deadline);
+                    if(showPast.cleanings ? !condPast : condPast) return; cC++;
+                    const block = document.createElement("div"); let isMyTurn = Array.isArray(c.assign) ? c.assign.includes(userData.realName) : (c.assign && c.assign.includes(userData.realName));
+                    let assignStr = Array.isArray(c.assign) ? c.assign.join(", ") : c.assign;
+                    block.className = `p-4 rounded-2xl border text-xs flex flex-col gap-1.5 text-left ${c.status==='completed'?'bg-slate-900/50 border-white/5':isMyTurn?'bg-rose-950/20 border-rose-900/50 shadow-inner':'bg-slate-900 border-white/5'}`;
+                    let stateLabel = c.status==='completed'?'✅ 完了':'⚠️ 未実施';
+                    
+                    let canExec = getTodayStr() >= c.startDate; let execBtn = '';
+                    if (c.status!=='completed' && (isMyTurn || isUserRoot)) {
+                        if (canExec) execBtn = `<button class="bg-rose-600 text-white px-3 py-1.5 rounded-lg font-black text-[10px] active-scale shadow-[0_0_10px_rgba(225,29,72,0.4)]" onclick="openCleanExecutionForm('${c.id}')">掃除実行</button>`;
+                        else execBtn = `<span class="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded">開始待 (${c.startDate}〜)</span>`;
+                    }
+                    let delBtn = isUserRoot ? `<button class="bg-slate-800 text-slate-400 font-bold px-3 py-1.5 rounded-lg active-scale ml-1" onclick="deleteCouncilItem('councilCleanings','${c.id}')">×</button>` : '';
+                    block.innerHTML = `<div class="flex justify-between items-center"><span class="font-black text-slate-200 text-sm">${assignStr}</span><span class="text-[9px] font-bold text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-white/5">${stateLabel}</span></div><div class="flex justify-between items-center text-[10px] text-slate-500 mt-1 font-bold"><span class="text-rose-400">期間: ${c.startDate} 〜 ${c.deadline}</span><div class="flex gap-1.5 items-center">${execBtn}${delBtn}</div></div>`;
+                    listC.appendChild(block);
+                });
+                if(cC===0) listC.innerHTML='<p class="text-center text-slate-500 text-[10px] py-4 font-bold">当番データはありません</p>';
+
+            } else {
+                const snapS = await getDocs(collection(db, "councilSchedules"));
+                const listS = document.getElementById("council-sched-list"); listS.innerHTML = "";
+                let arrS = []; snapS.forEach(d => arrS.push({id:d.id, ...d.data()})); arrS.sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+                let cS=0;
+                arrS.forEach(s => {
+                    const condPast = isPastDate(s.date);
+                    if(showPast.schedules ? !condPast : condPast) return; cS++;
+                    let assignStr = Array.isArray(s.assign) ? s.assign.join(", ") : s.assign;
+                    let delBtn = (isUserRoot || isUserAdmin) ? `<button onclick="deleteCouncilItem('councilSchedules','${s.id}')" class="bg-slate-800 text-slate-400 font-bold px-3 py-1.5 rounded-lg active-scale ml-2">×</button>` : '';
+                    listS.innerHTML += `<div class="p-4 bg-slate-900 rounded-2xl border border-white/5 flex justify-between items-center text-left"><div class="flex flex-col gap-1"><span class="font-black text-slate-200 text-sm">${s.title}</span><span class="text-[10px] text-slate-500 font-bold">🗓️ ${s.date} ${s.time||''} / 対: ${assignStr} @ ${s.loc||'未定'}</span></div>${delBtn}</div>`;
+                });
+                if(cS===0) listS.innerHTML='<p class="text-center text-slate-500 text-[10px] py-5 font-bold">予定はありません</p>';
+            }
+        };
+
+        window.openAddTaskModal = async () => {
+            const usersSnap = await getDocs(collection(db, "users")); const sel = document.getElementById("ct-assign");
+            sel.innerHTML = `<option value="役員・執行部全体">役員・執行部全体</option><optgroup label="✨ 各種団体・局">`;
+            ORGS.forEach(o => { if(o!=="その他の団体") sel.innerHTML += `<option value="${o}">${o}</option>`; });
+            DEPTS.forEach(d => { sel.innerHTML += `<option value="${d}">${d}</option>`; (DEPT_SECS[d] || []).forEach(s => { if(s) sel.innerHTML += `<option value="${d} ${s}">${d} ${s}</option>`; }); });
+            sel.innerHTML += `</optgroup><optgroup label="👤 個人">`;
+            usersSnap.forEach(d => { if(d.data().isApproved) sel.innerHTML += `<option value="${d.data().realName}">${d.data().realName}</option>`; });
+            sel.innerHTML += `</optgroup>`;
+            document.getElementById("ct-title").value = ""; document.getElementById("ct-deadline").value = getTodayStr(); document.getElementById("ct-time").value = "12:00"; document.getElementById("modal-council-add-task").classList.add('show');
+        };
+        window.saveCouncilTask = async () => {
+            const options = document.getElementById("ct-assign").selectedOptions; const values = Array.from(options).map(o => o.value);
+            const data = { title: document.getElementById("ct-title").value.trim(), assign: values.length>0?values:["役員・執行部全体"], deadline: document.getElementById("ct-deadline").value, time: document.getElementById("ct-time").value, status: 'pending', createdBy: userData.realName };
+            if(!data.title || !data.deadline) return alert("必須項目を入力してください"); await addDoc(collection(db, "councilTasks"), data); document.getElementById("modal-council-add-task").classList.remove('show'); switchCouncilTab('task');
+        };
+        window.requestTaskReview = async (id) => { if(confirm("完了申請を送信しますか？")) { await setDoc(doc(db, "councilTasks", id), {status: 'review'}, {merge:true}); switchCouncilTab('task'); } };
+        window.approveTaskComplete = async (id) => { await setDoc(doc(db, "councilTasks", id), {status: 'completed'}, {merge:true}); switchCouncilTab('task'); };
+
+        window.openAddCleanModal = async () => {
+            if(!isUserRoot) return; const usersSnap = await getDocs(collection(db, "users")); const sel = document.getElementById("cc-assign"); sel.innerHTML = "";
+            usersSnap.forEach(d => { if(d.data().isApproved) sel.innerHTML += `<option value="${d.data().realName}">${d.data().realName}</option>`; });
+            document.getElementById("cc-start").value = getTodayStr(); document.getElementById("cc-deadline").value = getTodayStr(); document.getElementById("modal-council-add-clean").classList.add('show');
+        };
+        window.saveCouncilClean = async () => {
+            const options = document.getElementById("cc-assign").selectedOptions; const values = Array.from(options).map(o => o.value); 
+            const st = document.getElementById("cc-start").value; const ed = document.getElementById("cc-deadline").value;
+            if(values.length === 0 || !st || !ed) return alert("当番者と期間を設定してください");
+            if(st > ed) return alert("開始日は締切日より前に設定してください");
+            await addDoc(collection(db, "councilCleanings"), { assign: values, startDate: st, deadline: ed, status: 'pending' });
+            document.getElementById("modal-council-add-clean").classList.remove('show'); switchCouncilTab('task');
+        };
+        window.openCleanExecutionForm = (id) => { document.getElementById("ce-id").value = id; document.querySelectorAll(".ce-chk").forEach(c => c.checked = false); document.getElementById("modal-clean-execution").classList.add('show'); };
+        window.submitCleanComplete = async () => {
+            let passed = true; document.querySelectorAll(".ce-chk").forEach(c => { if(!c.checked) passed = false; });
+            if(!passed) return alert("全項目を実施し、チェックしてください");
+            await setDoc(doc(db, "councilCleanings", document.getElementById("ce-id").value), {status:'completed'}, {merge:true}); document.getElementById("modal-clean-execution").classList.remove('show'); switchCouncilTab('task');
+        };
+
+        window.openAddSchedModal = async () => {
+            const usersSnap = await getDocs(collection(db, "users"));
+            const sel = document.getElementById("cs-assign"); sel.innerHTML = `<option value="役員・執行部全体" selected>役員・執行部全体</option><optgroup label="✨ 各種団体・局">`;
+            ORGS.forEach(o => { if(o!=="その他の団体") sel.innerHTML += `<option value="${o}">${o}</option>`; });
+            DEPTS.forEach(d => { sel.innerHTML += `<option value="${d}">${d}</option>`; (DEPT_SECS[d] || []).forEach(s => { if(s) sel.innerHTML += `<option value="${d} ${s}">${d} ${s}</option>`; }); });
+            sel.innerHTML += `</optgroup><optgroup label="👤 個人">`;
+            usersSnap.forEach(d => { if(d.data().isApproved) sel.innerHTML += `<option value="${d.data().realName}">${d.data().realName}</option>`; });
+            sel.innerHTML += `</optgroup>`;
+            document.getElementById("cs-title").value = ""; document.getElementById("cs-date").value = getTodayStr(); document.getElementById("cs-time").value = "12:00"; document.getElementById("cs-loc").value = ""; document.getElementById("modal-council-add-sched").classList.add('show');
+        };
+        window.saveCouncilSched = async () => {
+            const options = document.getElementById("cs-assign").selectedOptions; const values = Array.from(options).map(o => o.value);
+            const data = { title: document.getElementById("cs-title").value.trim(), date: document.getElementById("cs-date").value, time: document.getElementById("cs-time").value, loc: document.getElementById("cs-loc").value.trim(), assign: values.length>0?values:["役員・執行部全体"] };
+            if(!data.title || !data.date) return alert("必須項目を入力してください"); await addDoc(collection(db, "councilSchedules"), data); document.getElementById("modal-council-add-sched").classList.remove('show'); switchCouncilTab('sched');
+        };
+        window.deleteCouncilItem = async (coll, id) => { if(confirm("削除しますか？")) { await deleteDoc(doc(db, coll, id)); switchCouncilTab(coll==="councilSchedules"?"sched":"task"); } };
+
+        if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js'));
+    </script>
+</body>
+</html>
